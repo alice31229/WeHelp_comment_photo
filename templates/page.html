@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>圖文留言板</title>
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0 auto;
+            max-width: 80%;
+            text-align: center;
+        }
+
+        .title {
+            font-size: 20px;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        label {
+            margin-top: 10px;
+            margin-bottom: 10px;
+            min-width: 100px; 
+            text-align: right;
+            margin-right: 10px;
+        }
+
+        input {
+            margin-top: 10px;
+            margin-bottom: 10px;
+            width: 180px;
+            height: 25px;
+        }
+
+        .form-row {
+            align-items: center;
+            text-align: center;
+            margin-bottom: 10px;
+            width: 100%;
+        }
+
+        #submitBtn {
+            margin-left: 20px;
+            margin-top: 20px;
+        }
+
+        .message {
+            align-items: center;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .msg, .uploadImg {
+            margin-bottom: 5px;
+        }
+
+	.uploadImg {
+	    max-height: 200px;
+	    object-fit: cover;
+	}
+
+	.sep {
+            opacity: 0.5;
+	}
+        
+    </style>
+</head>
+<body>
+    <div class="title">發表一篇圖文</div>
+    <form id="contentSubmit">
+        <div class="form-row">
+            <label for="wordsInput">文字內容</label>
+            <input type="text" name="wordsInput" id="wordsInput">
+        </div>
+        <div class="form-row">
+            <label for="photoInput">圖片內容</label>
+            <input type="file" accept="image/jpeg, image/png, image/jpg" name="photoInput" id="photoInput">
+        </div>
+        <div class="form-row">
+            <input type="submit" id="submitBtn">
+        </div>
+    </form>
+
+    <hr class="sep">
+
+    
+    <div class="messages">
+    <!--     
+        <div class="message">
+            <div class="msg"></div>
+            <img src="" alt="" class="uploadImg">
+            <hr class="sep">
+        </div>
+        ... 
+    -->
+    </div>
+
+    <div id="loading"></div>
+
+    <script>
+        let submitContent = document.querySelector('#contentSubmit');
+        submitContent.addEventListener('submit', async function(event){
+            event.preventDefault();
+
+            let message = document.querySelector('#wordsInput').value;
+            let file = document.querySelector('#photoInput').files[0];
+
+            if (file && message!="") {
+
+                // 使用 FormData 傳遞圖片文件和留言
+                let formData = new FormData();
+                formData.append('message', message);
+                formData.append('file', file);
+
+                try {
+                    const postResponse = await fetch('/api/uploading', {
+                        method: "POST",
+                        body: formData
+                    });
+                    const postData = await postResponse.text();
+                    const upload_result = JSON.parse(postData);
+                    let infos = upload_result.data;
+
+                    eventsDomTree(infos);
+
+                    // Judge last page or not then show footer
+                    if (upload_result.nextPage == null) {
+                        nextPage = 0;
+                        loading.style.display = 'none';
+                    } else {
+                        nextPage = upload_result.nextPage;
+                    }
+
+                    // refresh page to get the newest content
+                    window.location.href = '/';
+
+                } catch (e) {
+                    console.error('Error fetching contents:', e);
+                } finally {
+                    isLoading = false;
+                }
+
+            } else {
+                alert('Please select photo file and fill in the message.');
+            }
+
+        })
+
+        function eventsDomTree(events) {
+            const more_contents = document.querySelector('.messages');
+
+            events.forEach(event => {
+                // Create picture div
+                const message = document.createElement('div');
+                message.setAttribute('class', 'message');
+
+                const eventImg = document.createElement('img');
+                eventImg.setAttribute('class', 'uploadImg');
+		        eventImg.src = event.photoURL;
+                eventImg.alt = 'photo';
+
+                const msg = document.createElement('div');
+                msg.setAttribute('class', 'msg');
+                msg.textContent = event.message;
+
+                const sep = document.createElement('hr');
+                sep.setAttribute('class', 'sep');
+
+                message.appendChild(msg);
+                message.appendChild(eventImg);
+                message.appendChild(sep);
+
+                more_contents.appendChild(message);
+            });
+        }
+
+        let nextPage = 0;
+        let isLoading = false;
+
+        async function addContent(page = 0) {
+            if (isLoading) return; // Prevent multiple fetch requests
+            isLoading = true;
+
+            let loading = document.querySelector('#loading');
+            loading.style.display = 'block';
+
+            try {
+                const postResponse = await fetch(`/api/contents?page=${page}`);
+                const postData = await postResponse.text();
+                const content_result = JSON.parse(postData);
+                let infos = content_result.data;
+
+                eventsDomTree(infos);
+
+                // Judge last page or not
+                if (content_result.nextPage == null) {
+                    nextPage = 0;
+                    loading.style.display = 'none';
+                } else {
+                    nextPage = content_result.nextPage;
+                }
+            } catch (e) {
+                console.error('Error fetching contents:', e);
+            } finally {
+                isLoading = false;
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+
+            addContent();
+
+            // infinite scroll observer settings
+            let observer;
+            const observerOptions = {
+                root: null,
+                rootMargin: '100px',
+                threshold: 0.1
+            };
+
+            const createObserver = (callback) => {
+                if (observer) observer.disconnect(); // avoid observers interfering each other
+                observer = new IntersectionObserver(callback, observerOptions);
+                const loadingElement = document.querySelector('#loading');
+                observer.observe(loadingElement);
+            };
+
+            const observerCallback = entries => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting && !isLoading) {
+                        if (nextPage) {
+                            addContent(nextPage);
+                        } 
+                    }
+                });
+            };
+
+            createObserver(observerCallback);
+
+        });
+
+    </script>
+</body>
+</html>
