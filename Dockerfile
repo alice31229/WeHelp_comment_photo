@@ -11,7 +11,7 @@ COPY . .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 開啟port
-EXPOSE 3000
+EXPOSE 8000
 
 # 運行程式
 CMD ["python", "app.py"]
