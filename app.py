@@ -1,4 +1,5 @@
 import os
+import uuid
 import boto3
 import uvicorn
 import mysql.connector
@@ -118,7 +119,9 @@ async def upload_message_photo(message: str = Form(...), file: UploadFile = File
 
     # S3 bucket & photo id
     bucket_name = os.getenv('AWS_BUCKET_NAME')
-    s3_object_key = f'photo/{file.filename}'
+    unique_photo_name =  uuid.uuid4()
+    #s3_object_key = f'photo/{file.filename}'
+    s3_object_key = f'photo/{unique_photo_name}'
 
     # upload photo to S3
     s3.put_object(Bucket=bucket_name, Key=s3_object_key, Body=img_input, ContentType=file.content_type)
